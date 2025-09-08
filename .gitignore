@@ -6,3 +6,21 @@ Gemfile.lock
 .jekyll-cache
 *~
 *__pycache__*
+
+# IDE files
+.idea/
+.vs/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Virtual environments
+venv/
+venv_*/
+env/
+ENV/

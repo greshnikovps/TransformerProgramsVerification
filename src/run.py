@@ -26,8 +26,7 @@ from src.models.programs import (
     gumbel_soft,
     softmax,
 )
-from src.utils import code_utils, data_utils, logging, metric_utils
-
+from src.utils import code_utils, data_utils, logging, metric_utils, Z3_utils
 logger = logging.get_logger(__name__)
 
 
@@ -96,6 +95,7 @@ def parse_args():
 
     parser.add_argument("--save", action="store_true")
     parser.add_argument("--save_code", action="store_true")
+    parser.add_argument("--save_Z3", action="store_true")
 
     parser.add_argument("--device", type=str, default="cuda")
 
@@ -193,7 +193,7 @@ def run_training(
                 else:
                     log_probs = logits.log_softmax(-1)
                     all_losses = -log_probs.gather(
-                        2, tgts.unsqueeze(-1)
+                        2, tgts.long().unsqueeze(-1)
                     ).squeeze(-1)
                     masked_losses = all_losses.masked_fill(
                         (tgts == y_pad_idx), 0.0
@@ -305,12 +305,12 @@ def run_test(
             log_probs = model(x, mask=mask).log_softmax(-1)
         tgts = y.to(model.device)
         if loss_agg == "per_seq":
-            losses = -log_probs.gather(2, tgts.unsqueeze(-1))
+            losses = -log_probs.gather(2, tgts.long().unsqueeze(-1))
             losses = losses.masked_fill(
                 (tgts == y_pad_idx).unsqueeze(-1), 0.0
             ).sum(-1)
         else:
-            all_losses = -log_probs.gather(2, tgts.unsqueeze(-1)).squeeze(-1)
+            all_losses = -log_probs.gather(2, tgts.long().unsqueeze(-1)).squeeze(-1)
             masked_losses = all_losses.masked_fill((tgts == y_pad_idx), 0.0)
             lengths = (tgts != y_pad_idx).sum(-1)
             losses = masked_losses.sum(-1) / lengths
@@ -489,6 +489,26 @@ def run_program(
             )
         except Exception as e:
             logger.error(f"error saving code: {e}")
+
+    if args.save_Z3:
+        logger.info(f"saving Z3 to {args.output_dir}")
+        x = idx_w[X_val[0]]
+        x = x[x != "<pad>"].tolist()
+        try:
+            Z3_utils.model_to_Z3(
+                model=model,
+                idx_w=idx_w,
+                idx_t=idx_t,
+                embed_csv=not args.one_hot_embed,
+                unembed_csv=True,
+                one_hot=args.one_hot_embed,
+                autoregressive=args.autoregressive,
+                var_types=True,
+                output_dir=args.output_dir,
+                name=args.dataset
+            )
+        except Exception as e:
+            logger.error(f"error saving Z3: {e}")
 
     return df
 

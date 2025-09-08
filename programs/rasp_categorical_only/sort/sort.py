@@ -21,7 +21,7 @@ def aggregate(attention, values):
 def run(tokens):
     # classifier weights ##########################################
     classifier_weights = pd.read_csv(
-        "programs/rasp_categorical_only/sort/sort_weights.csv",
+        "programs/rasp_categorical_only/sort_Z3/sort_weights.csv",
         index_col=[0, 1],
         dtype={"feature": str},
     )

@@ -50,16 +50,16 @@ def make_induction(
         s = [BOS]
         t = [PAD]
         for c in cs:
-            s += [letters[c], numbers[cton[c]]]
-            t += [UNK if letters[c] not in s[:-2] else numbers[cton[c]], PAD]
+                    s += [letters[c], numbers[cton[c]]]
+        t += [UNK if letters[c] not in s[:-2] else numbers[cton[c]], PAD]
         if np.random.randint(0, 2):
-            s = [BOS, np.random.choice(numbers)] + s[1:]
+            s = [BOS, str(np.random.choice(numbers))] + s[1:]
             t = [PAD] + t
         else:
             c = np.random.randint(0, size)
             s += [letters[c]]
             t += [UNK if letters[c] not in s[:-2] else numbers[cton[c]]]
-        h = "".join(s)
+        h = "".join([str(x) for x in s])
         if h not in seen or (not unique):
             sents.append(s)
             tags.append(t)
@@ -392,7 +392,7 @@ def get_conll_ner(
         }
         tag_col = "chunk_tags"
     else:
-        data = datasets.load_dataset("conll2003")
+        data = datasets.load_dataset("conll2003", trust_remote_code=True)
         t_idx = {
             "O": 0,
             "B-PER": 1,
@@ -445,7 +445,7 @@ def get_conll_ner(
         lst.append(pd.DataFrame({"sent": sents, "tags": tags}))
     logger.info(f"kept {len(lst[0])}/{len(train)} training examples")
     train, test, val = lst
-    if (dataset_size or 0) > 0 and dataset_size < len(train):
+    if dataset_size is not None and dataset_size > 0 and dataset_size < len(train):
         random.seed(seed)
         train = random.sample(train, dataset_size)
     if get_val:
@@ -530,7 +530,7 @@ def get_classification_dataset(
         lst.append(pd.DataFrame({"sent": sents, "tags": tags}))
     logger.info(f"{len(lst[0])}/{len(train)} training examples")
     train, val, test = lst
-    if (dataset_size or 0) > 0 and dataset_size < len(train):
+    if dataset_size is not None and dataset_size > 0 and dataset_size < len(train):
         random.seed(seed)
         train = random.sample(train, dataset_size)
     if get_val:
@@ -612,6 +612,8 @@ def get_dataset(
         raise NotImplementedError(name)
     if unique:
         for n in (2, 3, 4, 5):
+            if dataset_size is None:
+                break
             df = fns[name](
                 vocab_size=vocab_size,
                 dataset_size=n * dataset_size,
@@ -645,7 +647,7 @@ class LocalGlove:
         rows = []
         self.key_to_index = {}
         need = set(idx_w) if idx_w is not None else None
-        with open(fn, "r") as f:
+        with open(fn, "r", encoding='utf-8') as f:
             for line in f:
                 i = line.find(" ")
                 w = line[:i]
