@@ -1,4 +1,4 @@
-# ========= Вспомогательные функции =========
+# ========= Helper functions =========
 def aggregate_expr(attn_row, values):
     expr = values[0]
     for j in reversed(range(len(attn_row))):
@@ -11,7 +11,7 @@ def build_attention_block(solver, keys, queries, predicate_expr, values, name):
     attn = [[Bool(f"attn_{name}_{i}_{j}") for j in range(N)] for i in range(N)]
     any_match = [Bool(f"any_{name}_{i}") for i in range(N)]
 
-    # считаем, есть ли match для каждой i
+    # check if there's a match for each i
     for i in range(N):
         solver.add(
             any_match[i] == Or([predicate_expr(queries[i], keys[j]) for j in range(N)])
@@ -24,12 +24,12 @@ def build_attention_block(solver, keys, queries, predicate_expr, values, name):
         outputs = [String(f"attn_{name}_output_{i}") for i in range(N)]
 
     for i in range(N):
-        # ровно один True
+        # exactly one True
         solver.add(Sum([If(attn[i][j], 1, 0) for j in range(N)]) == 1)
 
         for j in range(N):
             if j == 0:
-                # fallback только когда нет ни одного match
+                # fallback only when there's no match
                 solver.add(
                     Implies(attn[i][0],
                             Or(Not(any_match[i]),
@@ -40,7 +40,7 @@ def build_attention_block(solver, keys, queries, predicate_expr, values, name):
                     Implies(attn[i][j], predicate_expr(queries[i], keys[j]))
                 )
 
-        # условие closest
+        # closest condition
         for j in range(N):
             for k in range(N):
                 solver.add(
@@ -190,7 +190,7 @@ def mlp_1_0_expr(pos, token):
 import pandas as pd
 from z3 import *
 
-# —————— Читаем веса и настраиваем константы ——————
+# —————— Read weights and set up constants ——————
 classifier_weights = pd.read_csv("sort_weights.csv", index_col=[0, 1], dtype={"feature": str})
 classes = classifier_weights.columns.tolist()
 
@@ -199,8 +199,8 @@ classes = classifier_weights.columns.tolist()
 def build_pipeline(solver, tokens, position_vars):
     N = len(tokens)
     """
-    Надёргивает все attention-, MLP-блоки, генерирует логиты и переменные pred[i].
-    Возвращает словари outputs_by_name, logits, pred_vars.
+    Pulls all attention-, MLP-blocks, generates logits and pred[i] variables.
+    Returns dictionaries outputs_by_name, logits, pred_vars.
     """
     # === Attention + MLP ===
     outs = {}
@@ -216,7 +216,7 @@ def build_pipeline(solver, tokens, position_vars):
     outs["attn_1_3"] = build_attention_block(solver, tokens, position_vars, predicate_1_3_expr, outs["attn_0_0"], "1_3")
     outs["mlp_1_0"] = build_mlp_block(solver, position_vars, outs["attn_1_2"], mlp_1_0_expr, "1_0")
 
-    # === Логиты ===
+    # === Logits ===
     logits = {(i, cls): Real(f"logit_{i}_{cls}") for i in range(N) for cls in classes}
     features = {
         "tokens":           tokens,
@@ -234,7 +234,7 @@ def build_pipeline(solver, tokens, position_vars):
         "mlp_1_0_outputs":  outs["mlp_1_0"],
     }
 
-    # для каждого (i,cls) одно уравнение logit = sum(If(...))
+    # for each (i,cls) one equation logit = Sum(If(...))
     for i in range(N):
         for cls in classes:
             contribs = []
@@ -254,7 +254,7 @@ def build_pipeline(solver, tokens, position_vars):
                         contribs.append(If(feat_var == const, w, RealVal("0")))
             solver.add(logits[(i, cls)] == Sum(contribs))
 
-    # === Предсказания ===
+    # === Predictions ===
     pred = [String(f"pred_{i}") for i in range(N)]
     for i in range(N):
         if i == 0:
@@ -272,27 +272,27 @@ def build_pipeline(solver, tokens, position_vars):
 def compute_original_predictions(input_tokens):
     N = len(input_tokens)
     s1 = Solver()
-    # 1. Переменные и фиксация input_tokens
+    # 1. Variables and fixing input_tokens
     tokens = [String(f"token_{i}") for i in range(N)]
     for i, val in enumerate(input_tokens):
         s1.add(tokens[i] == StringVal(val))
     pos = [Int(f"pos_{i}") for i in range(N)]
     for i in range(N):
         s1.add(pos[i] == IntVal(i))
-    # 2. Прогон пайплайна
+    # 2. Run the pipeline
     _, logits, pred_orig_vars = build_pipeline(s1, tokens, pos)
     assert s1.check() == sat
     m = s1.model()
 
-    # 3. Вынимаем конкретные строки
+    # 3. Extract concrete strings
     return [str(m.evaluate(pred_orig_vars[i]).as_string()) for i in range(N)]
 
-# ------- Фаза 2: ищем adversarial -------
+# ------- Phase 2: search for adversarial -------
 
 def is_permutation_z3(seq1, seq2, vocab):
     """
-    Возвращает Z3-условие, что adv_tokens — перестановка orig_tokens
-    по токенам из заданного словаря vocab (например, ["0", "1", ..., "4"])
+    Returns Z3-condition that adv_tokens is a permutation of orig_tokens
+    for tokens from the given vocabulary vocab (for example, ["0", "1", ..., "4"])
     """
     constraints = []
     for val in vocab:
@@ -381,21 +381,21 @@ def check_always_sorted_output(vocab, N):
          Not(is_sorted(pred_vars))
     ))
 
-    # 5. Проверка свойства
+    # 5. Property verification
     if s.check() == sat:
         m = s.model()
         input_example = [str(m.evaluate(tok).as_string()) for tok in tokens]
         output_example = [str(m.evaluate(pred).as_string()) for pred in pred_vars]
-        print("Найден контрпример!")
+        print("Counterexample found!")
         print("Input:", input_example)
         print("Output:", output_example)
         return False
     else:
-        print("Все возможные входы дают отсортированный результат.")
+        print("All possible inputs give a sorted result.")
         return True
 
 
-# ------- Запуск -------
+# ------- Run -------
 input_tokens = ["<s>", "1", "1", "1", "2", "1", "</s>"]
 print(f"Input tokens: {input_tokens}")
 

@@ -1,0 +1,234 @@
+﻿1. Introduction        2
+1.1 Motivation for Verifying Neural Networks Formally        2
+1.2 Scope and Objectives of the Thesis        2
+1.3 Summary of the Proposed Method        3
+1.4 Thesis Structure        4
+2. Related Work        5
+2.1 Transformer Programs        5
+2.2 Architecture and Training Constraints        5
+2.3 Formal Verification of Neural Networks        6
+2.4 Symbolic Reasoning and Program Extraction        7
+3. Problem Statement        8
+3.1 Sorting Task        8
+3.2 Reversal Task        9
+3.3 Input Constraints and Scope        9
+4. System Architecture        11
+4.1 Input Format and Conventions        11
+4.2 Static Z3 Helpers        11
+4.3 Parsing Transformer Program Functions        12
+4.4 Generating Z3 Expressions        12
+4.5 Building Attention and MLP Blocks        12
+4.6 Assembling the Verification Pipeline        13
+4.7 Example: Sorting Transformer        14
+5. Formalization and Property Checking        16
+5.1 Logical Encoding of the Sorting Property        16
+5.2 Logical Encoding of the Reversal Property        17
+5.3 Counterexample Generation with Z3        18
+6. Experiments and Results        20
+6.1 Sorting Transformer        20
+6.2 Reversal Transformer        21
+6.3 Discussion        22
+7. Conclusion and Future Work        24
+
+
+________________
+1. Introduction
+1.1 Motivation for Verifying Neural Networks Formally
+Transformer-based models have become central in modern machine learning thanks to their strong performance across various tasks, including natural language processing, image analysis, code generation, and algorithmic reasoning. Despite their success, these models are often hard to understand. It is usually unclear how exactly they make decisions, and they can behave unpredictably in rare or unusual situations. This creates serious concerns when such models are used in sensitive areas like medicine, law, or autonomous systems, where it is important not only that the model performs well, but also that its behavior can be trusted and clearly explained.
+Most current methods for evaluating neural networks are based on testing them with many examples from a dataset. While this helps measure performance, it does not give any guarantees about what the model will do in all possible situations. Formal verification offers a different approach. It aims to prove, using mathematical logic, that a model always behaves correctly according to some specification. In recent years, researchers have successfully applied these ideas to simpler types of neural networks, such as feedforward and convolutional models. However, transformer models are much harder to analyze in this way because of their more complex structure. They work with sequences of tokens, use attention mechanisms that mix information across positions, and apply multiple layers of processing — all of which make it difficult to describe their behavior using logic.
+This thesis explores how formal verification methods can be applied to transformers. It proposes a way to convert a trained transformer model into a logical form that can be analyzed using a tool called an SMT solver (Satisfiability Modulo Theories), specifically Z3. This allows us to check whether the transformer satisfies a given property — for example, whether it always returns a sorted version of its input — not just on some test cases, but in all possible situations within a defined input space.
+1.2 Scope and Objectives of the Thesis
+The main goal of this thesis is to build a tool that makes it possible to verify the behavior of transformer models using symbolic reasoning. The work focuses on transformers trained on simple algorithmic tasks where the correct output can be clearly defined. These models are exported into a special Python format, where each part of the transformer is written as a small function — for example, a function that checks a condition on a token, or one that decides the output of a layer.
+The parser developed in this thesis reads such Python code and converts it into a logical model suitable for Z3. Once this symbolic model is built, we can write logical formulas that describe the desired behavior of the model. Properties such as "the output is always a sorted version of the input," or "the output is the reverse of the input" are written in a formal way. To check whether a property holds, we ask Z3 whether it is possible for the model to break the property — in other words, whether a counterexample exists. If one is found, we then test this counterexample on the original transformer to confirm that the symbolic reasoning matches the model's actual behavior.
+This approach makes it possible not only to check that a transformer behaves correctly, but also to find and explain the specific cases where it might fail.
+1.3 Summary of the Proposed Method
+The method developed in this thesis begins with a Python program that represents a trained transformer as a series of simple, rule-based functions. These functions correspond to different components of the model: predicates on token positions, results of attention layers, outputs of multilayer perceptrons, and so on.
+A custom parser takes this program and generates an equivalent model in the Z3 solver. All token positions and outputs are turned into symbolic variables, and each layer of computation is described using logical expressions. This produces a symbolic version of the transformer that behaves like the real model but can be analyzed using formal methods.
+To verify a specific property, we write a logical formula that describes the property in terms of the model's output. We then ask Z3 whether this property could ever be false. If Z3 finds such a case, it gives us a specific input sequence where the transformer would behave incorrectly. We can then run this input through the original transformer to confirm whether the symbolic and real results match.
+This approach gives us a way to analyze transformer models in a rigorous and understandable way. It also helps us discover and explain specific inputs where the model might fail — something that is difficult to achieve using standard testing alone.
+1.4 Thesis Structure
+The rest of the thesis is organized as follows. Chapter 2 reviews related work, including the structure of transformer models, existing formal verification methods, and earlier attempts to apply such methods to neural networks. Chapter 3 introduces the tasks used in the project and the types of properties we want to check. Chapter 4 describes the system that was built, including how the parser works and how it builds the symbolic model. Chapter 5 explains how we write formal properties and how Z3 is used to check them and find counterexamples. Chapter 6 presents experimental results on three tasks — sorting, reversing, and finding the most frequent element — and analyzes the strengths and weaknesses of the method. Finally, Chapter 7 summarizes the results and discusses possible improvements and future directions for research.
+________________
+2. Related Work
+2.1 Transformer Programs
+The method proposed in this thesis builds directly on the framework introduced by Chan et al. (2023), where transformer models are trained in a constrained way to produce injective, interpretable, and executable Python programs. These models, called Transformer Programs, are designed to learn simple algorithmic tasks — such as sorting, reversing, or frequency counting — using a modified training process that encourages symbolic behavior.
+Instead of outputting probabilities over a vocabulary, Transformer Programs are trained to produce discrete and interpretable intermediate results, such as specific token decisions or logic-based choices. To achieve this, the authors constrain both the architecture and the training process. Each attention or MLP layer is trained to produce outputs that correspond to identifiable token-level operations. After training, the model is compiled into a Python program consisting of small, readable functions. Each function handles a particular aspect of the model’s logic: token predicates, attention results, or output mappings. These functions are deterministic, compact, and suitable for symbolic analysis.
+This code-level representation is central to the current thesis. The work presented here uses these compiled Python programs as input and applies formal verification techniques to them. While the original paper focused on interpreting and evaluating these models through simulation and task accuracy, this thesis goes further by treating the code as a formal object to be reasoned about in symbolic logic.
+2.2 Architecture and Training Constraints
+The Transformer Programs framework introduces several constraints to encourage structured and analyzable behavior. The models are trained on synthetic tasks where the input-output relationship is fully defined and verifiable. During training, the architecture is frozen to small, shallow transformer networks (typically with two layers) and trained using token-level supervision. Importantly, the softmax operations are implemented using token-to-token mappings that can be cleanly discretized after training.
+Attention heads are trained in such a way that their outputs can be interpreted as selecting specific tokens from the input. This makes it possible to describe attention not as a continuous distribution but as a symbolic selection mechanism. Similarly, MLP layers are trained to produce outputs that map to small integer sets, enabling each MLP decision to be replaced by a symbolic condition in the compiled program.
+By controlling model capacity and ensuring that outputs are deterministically interpretable, the Transformer Programs approach creates models that are both functional and transparent. This structure is crucial for applying formal methods such as SMT solving, since it allows the model to be encoded as logical rules rather than opaque numerical functions.
+2.3 Formal Verification of Neural Networks
+Formal verification is a field concerned with proving that a system behaves correctly under all possible inputs. In the context of machine learning, this typically means checking whether a model satisfies some correctness property for every input in a given domain. For neural networks, this is often done using SAT or SMT solvers, which take a logical formula representing the model and a specification, and determine whether the specification always holds.
+Previous research has applied formal methods to neural networks with piecewise-linear activation functions such as ReLU. Notable tools include Reluplex, DeepZ, and ERAN, which verify properties like adversarial robustness or bounded output ranges. However, these methods are typically designed for continuous input spaces and numeric outputs, and do not translate easily to symbolic, sequence-based models like transformers.
+The contribution of this thesis is to bridge this gap: by taking the symbolic Python programs generated from Transformer Programs, and automatically converting them into SMT logic, we can apply formal verification techniques to a new class of models that operate on symbolic sequences rather than real-valued vectors.
+2.4 Symbolic Reasoning and Program Extraction
+The idea of extracting symbolic structure from trained models is not new. Several approaches have aimed to reverse-engineer neural networks into interpretable forms, or to combine them with logic-based systems. Examples include distillation into decision trees, rule extraction from classification models, and the use of program synthesis to explain learned behavior.
+What sets Transformer Programs apart is their ability to directly compile a transformer into code that resembles a hand-written algorithm. This makes them especially suitable for static analysis and symbolic reasoning. The current thesis leverages this property by introducing a parser and SMT model generator that take such code as input and construct a verifiable logical model.
+This enables the use of formal reasoning tools, such as the Z3 SMT solver, to prove or disprove properties of the model. Unlike prior works that simulate the model or rely on heuristics, the method developed here allows for exact reasoning and produces counterexamples when a property is violated — which can then be tested back on the original transformer.
+________________
+
+
+3. Problem Statement
+This thesis addresses the problem of formally verifying the correctness of transformer models trained to perform simple algorithmic tasks. The models under consideration are not arbitrary large-scale transformers, but small and fully interpretable Transformer Programs trained using the method described in Chan et al. (2023). These models are exported as Python code composed of deterministic functions, which are then analyzed symbolically using SMT solvers.
+The main goal is to automatically verify whether a given transformer always produces the correct output for all valid inputs within a constrained domain. The verification is performed by translating the Python representation of the model into a logical specification, then checking whether the model satisfies a formal correctness property. If the property does not hold, a counterexample input is generated.
+This chapter introduces the two core tasks selected for analysis — sorting and sequence reversal — and describes how their correctness properties are formulated in logical terms. These tasks were chosen because they have clear mathematical definitions and well-defined ground-truth outputs, making them suitable for formal reasoning.
+3.1 Sorting Task
+In the sorting task, the transformer receives a sequence of discrete tokens representing integers. The expected behavior is that the output sequence consists of the same elements, rearranged in ascending order. For example, the input [2, 3, 1] should yield the output [1, 2, 3].
+To verify correctness formally, the following two conditions are checked:
+1. Permutation property: The output must be a permutation of the input sequence. That is, all elements in the input must appear exactly once in the output, and no additional elements are allowed.
+
+2. Order property: The output must be sorted in non-decreasing order. Formally, for all adjacent elements in the output sequence, we require that
+output[i + 1] ≥ output[i].
+
+Both properties are encoded as logical formulas over symbolic variables representing the model’s output. The permutation condition is expressed by counting token occurrences in both input and output and asserting their equality. The order condition is a conjunction of inequalities over output positions. These properties are combined into a single verification query. If the SMT solver finds an input for which either condition fails, the transformer is considered incorrect on that input.
+3.2 Reversal Task
+In the reversal task, the transformer must return the input sequence in reverse order. For example, given the input [3, 4, 5, 1], the correct output is [1, 5, 4, 3].
+This task has a single, straightforward correctness condition: the output sequence must match the input sequence reversed. Formally, for every position i in the sequence of length n, the condition is
+output[i] = input[n - 1 - i].
+This property is encoded directly as a set of equalities over symbolic variables. Since the reversal task does not involve content-based decisions (like sorting or aggregation), it serves as a baseline for analyzing whether the transformer has learned to model simple positional patterns correctly. It also allows for more efficient symbolic verification, since the property consists of a direct mapping between positions.
+3.3 Input Constraints and Scope
+In both tasks, input sequences are drawn from a fixed-size vocabulary of discrete tokens. The sequence length is also bounded (e.g., between 3 and 6 tokens), which makes the verification process tractable. The transformer is assumed to operate deterministically — its output for a given input is fully determined by the trained logic encoded in the exported Python program.
+The verification process is performed symbolically, without enumerating all possible inputs. Instead, the SMT solver operates over symbolic input variables and searches for a counterexample assignment that violates the property. If the solver finds a satisfying assignment, this input is extracted and evaluated on the actual transformer to confirm the failure.
+The aim is not only to prove correctness for selected models but also to demonstrate how symbolic reasoning can expose edge cases, incorrect generalization, or unexpected behavior in models trained on seemingly simple tasks.
+________________
+4. System Architecture
+This chapter details the end‑to‑end pipeline that takes a trained Transformer Program—expressed as a Python module of small predicate and MLP functions—and produces a Z3 model suitable for formal verification. We describe how input sequences are encoded, how the Python code is parsed, how Z3 expressions are generated for each transformer component, and finally how these parts are assembled into a verification script.
+4.1 Input Format and Conventions
+All transformer instances process sequences of tokens drawn from the fixed vocabulary {"<s>", "</s>", "1", "2", "3", "4"}. The tokens <s> and </s> mark the beginning and end of sequence, respectively. During verification we fix the sequence length to the same value used at training—seven tokens for the sorting transformer. Each position in the input is therefore represented by a Z3 String variable token_0, …, token_6, with constraints ensuring each variable equals one of the six allowed strings. In parallel, we introduce Z3 Int constants pos_0, …, pos_6 set to 0 through 6, which serve as the position indices consumed by predicate and MLP expressions.
+4.2 Static Z3 Helpers
+Before translating any model‑specific logic, a common header is included in each script. This header imports the Z3 Python API, sets up a Solver, and defines several utility functions. Among them is aggregate_expr, which implements hard‑attention aggregation by scanning Boolean attention flags from last to first and returning the corresponding value or defaulting to the first element. Two further utilities, build_attention_block and build_mlp_block, wrap the repeated pattern of declaring output variables, adding constraints for exactly‑one attention bit per query, and wiring each output through aggregate_expr or conditional expressions. By isolating this boilerplate, the rest of the generation code can focus on the model’s unique logic.
+4.3 Parsing Transformer Program Functions
+The Transformer Program is provided as a Python file containing multiple small functions named predicate_X_Y and mlp_X_Y. Each predicate function tests a position and a token (or two positions) against a collection of cases and returns a Boolean. Each MLP function tests a position and an attention output token and returns a small integer. Using Python’s ast module, the parser locates all such definitions and extracts their decision branches. For a predicate, it records each branch’s condition—typically a set of positions mapping to a required token equality—and the default else‑branch. For an MLP, it gathers each (position, attn_output) → integer mapping and the default return value.
+4.4 Generating Z3 Expressions
+Once the AST has been analyzed, generator functions are emitted into the verification script. A predicate generator—named predicate_X_Y_expr—accepts two Z3 expressions, for position and token, and returns a Z3 BoolRef built from nested Or and And combinations mirroring the original Python logic. An MLP generator—mlp_X_Y_expr—accepts a position and an attention result and returns an ArithRef obtained by folding a sequence of If(And(...), value, next_expr) calls in reverse order, so that the final else covers the default return. These generated _expr functions faithfully reproduce the model’s discrete decisions as Z3 ASTs.
+4.5 Building Attention and MLP Blocks
+With _expr functions prepared, each attention head is constructed by calling:
+build_attention_block(
+    solver,
+    keys = tokens or previous outputs,
+    queries = tokens or position_vars,
+    predicate_expr = predicate_X_Y_expr,
+    values = tokens or other lists,
+    name = "attn_X_Y"
+)
+Inside this helper, a fresh Boolean matrix attn_X_Y[i][j] is declared, constraints enforce exactly one True per row (with fallback to index 0 and “closest” tie‑breaking), and output variables attn_X_Y_output_i are defined by aggregate_expr(attn_X_Y[i], values).
+MLP blocks are created similarly:
+build_mlp_block(
+    solver,
+    positions = position_vars,
+    tokens = attn_outputs or tokens,
+    mlp_expr_fn = mlp_X_Y_expr,
+    name = "mlp_X_Y"
+)
+This helper declares integer outputs mlp_X_Y_output_i = mlp_X_Y_expr(pos_i, token_i) and adds no further constraints, since the _expr function already encodes the correct logic.
+4.6 Assembling the Verification Pipeline
+A high‑level routine, build_pipeline, is generated by inspecting the model’s main run(…) function in the Python module. This routine issues the attention and MLP block builders in the same order as the original model layers, collects all intermediate outputs in a dictionary, and then constructs the final linear classifier. Classifier weights are loaded from a CSV (e.g. sort_weights.csv), and for each output position i and class token c a Z3 integer logit_i_c is defined as a weighted sum of indicator expressions:
+
+
+logit_i_c == Sum(
+    weight_f_c * If(feature_f_output_i == feature_value, 1, 0),
+    … for each feature f and possible value
+)
+The predicted token pred_i at position i is then constrained to be the c that maximizes logit_i_c.
+4.7 Example: Sorting Transformer
+In the provided sort_z3_test.py, the sorting transformer is realized with four attention heads and two MLPs per layer. After parsing and expression generation, the script declares seven input String variables (token_0 through token_6) and seven Int positions. It invokes build_attention_block eight times (four heads in each of two layers) and build_mlp_block twice. The final classifier uses the extracted weights to define logit_i_c for each class c ∈ {"<s>","</s>","1","2","3","4"}.
+At the end of the script, two formal properties are asserted:
+   1. Permutation: for each token literal, the multiset of predicted outputs equals the multiset of inputs;
+
+   2. Order: for all i from 0 to 5, pred_i ≤ pred_{i+1} under the predefined total ordering <s> < 1 < 2 < 3 < 4 < </s>.
+
+A call to solver.check() then either returns unsat—proving that the transformer always sorts correctly on length‑7 sequences—or sat, providing a concrete counterexample input that violates one of the properties.
+________________
+5. Formalization and Property Checking
+In this chapter we describe how the discrete transformer logic—originally exported as Python functions and compiled into a Z3 model—is endowed with formal correctness properties and checked via SMT solving. We focus on the two core tasks: sorting and sequence reversal. For each task, we explain how the desired specification is encoded as a logical formula over the model’s symbolic outputs, how its negation is asserted to search for counterexamples, and how Z3 produces either a proof of correctness or a concrete failing input.
+5.1 Logical Encoding of the Sorting Property
+The sorting transformer operates on a fixed‑length input array of seven tokens, each drawn from the vocabulary {"<s>","</s>","1","2","3","4"}. After building the full pipeline (Section 4.6), we obtain seven symbolic output variables
+pred_0, pred_1, …, pred_6
+of Z3 String sort, constrained by the model’s computed logits and argmax logic.
+To assert that the transformer always produces a correctly sorted permutation of its input, we introduce two families of constraints:
+Permutation constraint. For each literal token ℓ in the vocabulary, the multiset of occurrences among outputs {pred_i} must match that among inputs {token_i}. This is encoded by counting equalities: for every ℓ we assert
+Sum([If(token_i == StringVal(ℓ), 1, 0) for i in range(7)])
+==
+Sum([If(pred_i  == StringVal(ℓ), 1, 0) for i in range(7)])
+      1.  Equating these seven integer sums enforces that no token is lost, duplicated, or spuriously introduced.
+
+Order constraint. We impose a total ordering on the token set:
+<s> < "1" < "2" < "3" < "4" < </s>.
+For each adjacent pair of output positions i and i+1, we assert
+Or(
+  And(pred_i == StringVal("<s>"), pred_{i+1} == StringVal("<s>")),
+  And(pred_i == StringVal("1"),   Or(pred_{i+1} == StringVal("1"), pred_{i+1} == StringVal("2"), …)),
+  …,
+  And(pred_i == StringVal("4"),   Or(pred_{i+1} == StringVal("4"), pred_{i+1} == StringVal("</s>"))),
+  And(pred_i == StringVal("</s>"), pred_{i+1} == StringVal("</s>"))
+)
+         2.  or more compactly via pairwise comparisons using auxiliary mapping to integers. Together, these constraints guarantee a non‑decreasing sequence under the defined order.
+
+To search for violations, we assert the negation of the conjunction of all these constraints. In practice, we add to the solver a disjunction: “there exists a token ℓ for which the input/output counts differ, or there exists an index i for which pred_i > pred_{i+1} under the total ordering.” A satisfying assignment to this negated formula corresponds to a concrete sequence of seven input tokens for which the sorting transformer fails either the permutation or the order test.
+5.2 Logical Encoding of the Reversal Property
+In the reversal task, the transformer’s pipeline (defined in reverse_z3_test.py) produces outputs pred_0 … pred_{N-1} for an input of length N (typically eight tokens including <s> and </s>). The single correctness property requires that internal outputs match the reverse of inputs while preserving the boundary tokens:
+            * pred_0 == token_0 and pred_{N-1} == token_{N-1},
+
+            * for each i in 1..N-2, pred_i == token_{N-1-i}.
+
+We encode this as a conjunction of equalities:
+pred_0 == token_0
+pred_{N-1} == token_{N-1}
+And([pred_i == token_{N-1-i} for i in range(1, N-1)])
+
+
+To find counterexamples, we assert its negation:
+Not( that conjunction )
+
+
+Thus Z3 is asked to produce an input sequence consistent with the vocabulary and boundaries for which at least one of these equalities fails. A sat result yields a concrete input that the transformer does not reverse correctly; unsat certifies correct reversal on all N‑length inputs.
+5.3 Counterexample Generation with Z3
+Once the negated specification is in place, the solver proceeds symbolically over all possible inputs. If the conjunction of model constraints and negated property is unsatisfiable, Z3 certifies that no counterexample exists, proving the model correct for the given length and vocabulary. If satisfiable, Z3 returns a model assigning concrete literals to each input token_i, yielding an explicit counterexample sequence.
+These counterexamples serve two purposes. First, they identify precise failure modes of the trained transformer logic. Second, when executed on the original Python transformer (via the compute_original_predictions routine in reverse_z3_test.py or its sorting analogue), they confirm that the symbolic abstraction matches the actual model behavior, ensuring soundness of the verification pipeline.
+In Chapter 6 we will present empirical data on solver outcomes—numbers of sat vs. unsat calls, solving times, and the nature of discovered counterexamples—thus completing the picture of how formal verification uncovers the limits of Transformer Programs.
+________________
+6. Experiments and Results
+The verification pipeline was applied to both the sorting and reversal Transformer Programs described in previous chapters. In each case, we invoked Z3 on the encoding of the model plus the negation of the correctness property, and examined whether a satisfying assignment (counterexample) exists. Below we report the concrete inputs found by Z3, the corresponding (incorrect) outputs, and their validation on the original Python transformer implementation.
+6.1 Sorting Transformer
+When checking the sorting transformer on sequences of length seven, Z3 returned a satisfying assignment rather than proving unsatisfiability. The counterexample input produced by Z3 was
+["<s>", "1", "1", "1", "2", "1", "</s>"]
+
+
+Under the total ordering <s> < "1" < "2" < "3" < "4" < </s>, this sequence should sort to
+["<s>", "1", "1", "1", "1", "2", "</s>"].
+
+
+However, both the Z3 model and the original transformer produced the incorrect output
+["<s>", "1", "1", "1", "1", "1", "</s>"].
+
+
+This demonstrates that the transformer fails the permutation property: one occurrence of the token "2" is dropped in favor of an extra "1". By manually substituting the sequence into the Python implementation of the trained transformer, we confirmed that it indeed returns the same erroneous output, validating that the Z3 abstraction precisely captures the model’s behavior.
+The nature of this failure suggests that, under repeated identical inputs, the attention‑and‑MLP logic in the model does not always count or propagate the distinct element "2". Instead, when faced with multiple identical keys, the hard‑attention mechanism may “default” to the closest match or fall back on boundary conditions in a way that inadvertently duplicates the more common token. This counterexample reveals a systematic weakness in the learned logic for handling duplicate tokens.
+6.2 Reversal Transformer
+The reversal transformer was tested on sequences of length eight (including boundary tokens). Here again Z3 found a counterexample rather than certifying correctness. The input produced by the solver was
+["<s>", "0", "3", "1", "3", "2", "1", "</s>"]
+
+
+The expected reversed output, under a strict position‑by‑position inversion, would be
+["<s>", "1", "2", "3", "1", "3", "0", "</s>"],
+
+
+but both the Z3 model and the actual transformer returned
+["<s>", "1", "3", "3", "1", "3", "0", "</s>"].
+
+
+Once more, substituting this sequence into the original Python transformer yielded the identical erroneous prediction, confirming that the counterexample reflects genuine incorrect behavior. The deviation occurs at the second output position, where the model repeats the third input token ("3") instead of the correctly reversed "2". This indicates a flaw in the positional attention logic, in which the mechanism intended to map position i to N−1−i sometimes misfires when multiple identical values appear or when the fallback logic for “no matching attention” is invoked.
+6.3 Discussion
+The counterexamples uncovered by Z3 reveal that even for seemingly simple algorithmic tasks, the learned Transformer Programs can harbor subtle but systematic errors. In the sorting example, the misplacement of the token "2" in favor of an extra "1" suggests that the combination of hard‑attention selection and lookup‑table MLPs fails to reliably track distinct token counts when many identical elements appear. Because the predicate logic in each attention head is constrained to select exactly one key for each query, duplicate values can collapse onto a single attention flow, causing downstream MLPs to lose information about minority tokens. This behavior underscores a fundamental limitation of the discrete attention mechanism as implemented: without an explicit counting or multi‑match aggregation, the model cannot distinguish between multiple occurrences of the same token in all contexts.
+In the reversal task, the error arises from an incorrect mapping of position to its mirror index under certain input patterns. Although the Python code for the reversal transformer defines predicates that should map each position i to N−1−i, the Z3 counterexample shows that in practice, default or fallback branches can be triggered when no predicate branch exactly matches. For instance, if a particular position’s predicate fails (due perhaps to an unexpected token type or duplicated attention signal), the generator may inadvertently reuse the previous valid attention mapping or apply a boundary default. The result is an output that deviates from the exact reverse, revealing that the handcrafted defaulting logic—intended to ensure total coverage—can be a double‑edged sword, masking implementation gaps under exotic inputs.
+These findings demonstrate the value of formal verification over conventional empirical testing. A typical held‑out dataset might never include sequences with repeated tokens in the precise pattern of the sorting counterexample, nor the particular token arrangement that breaks the reversal logic. Yet Z3 exhaustively reasons over the entire input domain (subject to the length bound), guaranteeing that no corner case is overlooked. By automatically generating and validating counterexamples, the pipeline provides actionable insights into where the model’s logical design can be fortified.
+From a broader perspective, these experiments illustrate both the promise and the challenge of combining Transformer Programs with SMT‑based analysis. On one hand, the ability to export a trained model into small, discrete functions makes it feasible to reason formally about its behavior. On the other hand, the very approximations and design choices that render the transformer interpretable—such as one‑to‑one attention predicates and lookup‑table MLPs—also impose brittle inductive biases that may fail outside the primary training distribution. Future work could address these weaknesses by integrating more expressive symbolic modules (e.g., multi‑match attention with counting, or range‑based positional selectors) and by coupling the verification pipeline with a counterexample‑guided retraining loop, thereby progressively tightening the model until it satisfies the desired specifications by construction.
+
+________________
+7. Conclusion and Future Work
+This thesis has demonstrated a novel framework for formally verifying the behavior of transformer models on simple algorithmic tasks by translating them into symbolic logic amenable to SMT solving. Building upon the Transformer Programs paradigm—which trains constrained transformer architectures that can be decompiled into concise Python functions—we developed an automated pipeline that parses these functions, generates corresponding Z3 expressions for attention heads and MLP layers, and assembles a complete verification script.
+Applying this pipeline to two canonical tasks—sorting and sequence reversal—we encoded rigorous correctness specifications and used Z3 to search the exhaustive input space up to fixed lengths. In both cases, the solver uncovered genuine counterexamples that were immediately reproducible in the original transformer implementations. The sorting transformer failed to preserve a unique token under heavy duplication, while the reversal transformer mis‑mapped positions in a particular token arrangement. These discoveries highlight how formal verification can expose edge‑case failures that are unlikely to emerge through conventional test‑set evaluation. Importantly, the exact matching of Z3 and Python outputs validates the soundness of our symbolic translation.
+The implications of this work extend beyond the two studied tasks. By showing that even small, interpretable transformer programs can be rigorously checked—and by revealing fundamental failure modes of discrete attention and lookup‑table modules—this approach paves the way for building more robust and trustworthy models. It underscores the complementary roles of learning and formal methods: training can imbue models with high accuracy on typical inputs, while symbolic verification can certify—or refute—their behavior on all inputs within a given specification.
+At the same time, several limitations point toward fertile directions for future research. First, the current module set—binary, one‑to‑one attention predicates and fixed‑arity MLP lookup tables—offers interpretability at the cost of expressivity and robustness. Introducing richer symbolic primitives, such as multi‑match attention with explicit counting or range‑based selectors, could close gaps in handling duplicates and positional edge cases. Second, the verification has so far been limited to small sequence lengths and vocabularies; scaling to longer sequences or more complex tasks will require both performance optimizations in the Z3 encoding and possibly abstractions that reduce the search space. Third, integrating counterexample‑guided retraining could create a closed loop: once a counterexample is found, the transformer is further trained to eliminate that failure mode, and the augmented model is re‑verified, iterating until formal correctness is achieved.
+In summary, this thesis establishes a blueprint for formally certifying transformer programs by combining learnable, decompilable architectures with powerful SMT solvers. The successes and failures observed in the sorting and reversal tasks offer valuable lessons for designing more rigorous, interpretable neural systems. Looking ahead, extending this methodology to increasingly complex models and specifications promises to bring stronger correctness guarantees to the growing ecosystem of transformer‑based applications.

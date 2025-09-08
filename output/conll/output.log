@@ -1,0 +1,17 @@
+I 2025-04-04T14:44:13 __main__:655: args: {'output_dir': 'output/conll', 'dataset': 'conll_ner', 'vocab_size': 10000, 'dataset_size': -1, 'min_length': 1, 'max_length': 32, 'seed': 0, 'do_lower': 0, 'unique': 1, 'replace_numbers': 1, 'n_vars_cat': 4, 'n_vars_num': 1, 'd_var': 32, 'n_heads_cat': 4, 'n_heads_num': 0, 'd_mlp': 64, 'n_cat_mlps': 1, 'n_num_mlps': 0, 'mlp_vars_in': 2, 'n_layers': 2, 'sample_fn': 'gumbel_soft', 'one_hot_embed': False, 'count_only': True, 'selector_width': 0, 'attention_type': 'cat', 'rel_pos_bias': 'fixed', 'mlp_type': 'cat', 'autoregressive': False, 'glove_embeddings': 'data/glove.840B.300d.txt', 'do_glove': 1, 'unembed_mask': 1, 'pool_outputs': 0, 'standard': False, 'd_model': 64, 'd_head': None, 'n_heads': 2, 'dropout': 0.0, 'lr': 0.05, 'max_grad_norm': None, 'gumbel_samples': 1, 'n_epochs': 50, 'batch_size': 32, 'tau_init': 3.0, 'tau_end': 0.01, 'tau_schedule': 'geomspace', 'loss_agg': 'per_token', 'save': True, 'save_code': True, 'device': 'cpu'}
+I 2025-04-04T14:44:16 src.utils.data_utils:446: kept 12255/14041 training examples
+I 2025-04-04T14:44:16 __main__:623: vocab size: 10002
+I 2025-04-04T14:44:16 __main__:624: X_train: (12255, 32), Y_train, (12255, 32)
+I 2025-04-04T14:44:16 __main__:625: X_val: (2757, 32), Y_val, (2757, 32)
+I 2025-04-04T14:44:16 __main__:626: X_test: (3076, 32), Y_test, (3076, 32)
+I 2025-04-04T14:44:16 __main__:629: 9930/12255 unique training inputs
+I 2025-04-04T14:44:16 __main__:630: 2363/3076 unique test inputs not in train
+I 2025-04-04T14:44:25 src.utils.data_utils:657: loaded 9476 rows from data/glove.840B.300d.txt
+I 2025-04-04T14:44:25 src.utils.data_utils:682: found 9476/10002 glove embeddings
+I 2025-04-04T14:44:25 src.utils.data_utils:683: missing ['<pad>', '@-@', '@.@', '@-@-@', '@.', '@,@', '.@', '@th', '@:@.@', '@/@', '...']
+I 2025-04-04T16:25:38 __main__:452: train: loss=0.035285841673612595, acc=0.987664126142143, metrics={'precision': 0.9537069064914101, 'recall': 0.9376523267018081, 'f1': 0.9456114778930521}
+I 2025-04-04T16:25:40 __main__:452: val: loss=0.36159971356391907, acc=0.9492548343392043, metrics={'precision': 0.8243812532912059, 'recall': 0.7608748481166464, 'f1': 0.791355996461519}
+I 2025-04-04T16:25:43 __main__:452: test: loss=0.7264991402626038, acc=0.9309517129586333, metrics={'precision': 0.7518565941101152, 'recall': 0.6935979210961493, 'f1': 0.7215532071762102}
+I 2025-04-04T16:25:43 __main__:469: saving model to output\conll\model.pt
+I 2025-04-04T16:25:43 __main__:473: saving code to output/conll
+I 2025-04-04T16:25:43 __main__:649: writing results to output\conll\results.csv
