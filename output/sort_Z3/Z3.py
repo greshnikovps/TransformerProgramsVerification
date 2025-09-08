@@ -17,7 +17,7 @@ def build_attention_block(solver, keys, queries, predicate_expr, values, name):
             any_match[i] == Or([predicate_expr(queries[i], keys[j]) for j in range(N)])
         )
 
-    # выбираем сорт выходов по values
+    # choose output sort based on values
     if values and isinstance(values[0], AstRef) and values[0].sort() == IntSort():
         outputs = [Int(f"attn_{name}_output_{i}") for i in range(N)]
     else:
@@ -308,13 +308,13 @@ def find_adversarial(input_tokens, vocab):
     print("Original preds:", pred_orig)
 
     s2 = Solver()
-    # 1. Новые переменные токенов-адверсариал
+    # 1. New adversarial token variables
     tokens_adv = [String(f"tok_adv_{i}") for i in range(N)]
     s2.add(tokens_adv[0] == StringVal("<s>"))
     s2.add(tokens_adv[-1] == StringVal("</s>"))
 
     for tok in tokens_adv:
-        # Только допустимые токены
+        # Only valid tokens
         s2.add(Or([tok == StringVal(v) for v in input_tokens]))
 
     orig_inner = input_tokens[1:-1]
@@ -324,16 +324,16 @@ def find_adversarial(input_tokens, vocab):
     s2.add(is_permutation_z3(orig_z3, adv_inner, vocab))
 
 
-    # 2. Позиции (те же)
+    # 2. Positions (the same)
     pos = [Int(f"pos_{i}") for i in range(N)]
     for i in range(N):
         s2.add(pos[i] == IntVal(i))
 
 
-    # 3. Прогон pipeline над adversarial
+    # 3. Run pipeline on adversarial
     _, logits, pred_adv_vars = build_pipeline(s2, tokens_adv, pos)
 
-    # 4. Отличие предсказания
+    # 4. Prediction difference
     s2.add(Or([pred_adv_vars[i] != StringVal(pred_orig[i]) for i in range(N)]))
 
     if s2.check() == sat:
@@ -346,7 +346,7 @@ def find_adversarial(input_tokens, vocab):
         print(f"No adversarial example found.")
 
 
-# ------- Фаза 3: check correctness -------
+# ------- Phase 3: check correctness -------
 
 def is_sorted(seq):
     return And([
@@ -356,11 +356,11 @@ def is_sorted(seq):
 def check_always_sorted_output(vocab, N):
     s = Solver()
 
-    # 1. Переменные: произвольные токены
+    # 1. Variables: arbitrary tokens
     tokens = [String(f"tok_{i}") for i in range(N)]
     pos = [IntVal(i) for i in range(N)]
 
-    # 2. Ограничиваем допустимыми токенами из словаря
+    # 2. Restrict to valid tokens from the vocabulary
     for i, tok in enumerate(tokens):
         if i == 0:
             s.add(tok == StringVal("<s>"))
@@ -369,12 +369,12 @@ def check_always_sorted_output(vocab, N):
         else:
             s.add(Or([tok == StringVal(v) for v in vocab]))
 
-    # 3. Добавляем pipeline и получаем предсказания
+    # 3. Add pipeline and get predictions
     _, _, pred_vars = build_pipeline(s, tokens, pos)
 
-    # 4. Предсказание должно быть:
-    #  - перестановкой входа
-    #  - отсортировано по возрастанию
+    # 4. Prediction should be:
+    #  - a permutation of the input
+    #  - sorted in ascending order
 
     s.add(Or(
          Not(is_permutation_z3(pred_vars[1:-1], tokens[1:-1], vocab)),
